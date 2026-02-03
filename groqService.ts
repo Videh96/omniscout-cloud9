@@ -82,11 +82,11 @@ REQUIRED JSON STRUCTURE:
   "tacticalInsights": {
     "strengths": ["Strength 1", "Strength 2"],
     "weaknesses": [
-      "MANDATORY: Specific weakness 1 with tactical details",
-      "MANDATORY: Specific weakness 2 with map/timing info"
+      "Specific weakness 1 with tactical details",
+      "Specific weakness 2 with map/timing info"
     ],
     "howToWin": "Concrete counter-strategy",
-    "counterPicks": ["Champion/Agent 1", "Champion/Agent 2"],
+    "counterPicks": ["Champion 1", "Champion 2"],
     "winCondition": "The specific condition required to win",
     "confidenceScore": 85,
     "threatLevel": "CRITICAL"
@@ -99,7 +99,7 @@ VALIDATION RULES:
 - ❌ REJECT if weaknesses array is empty or says "No weakness"
 - ✅ ACCEPT only if weaknesses are specific and exploitable
 - ✅ ENSURE threatLevel is EXACTLY one of: "CRITICAL", "ELEVATED", "MODERATE", "LOW"
-- ✅ ENSURE output is valid JSON with no trailing commas or markdown formatting`;
+- ✅ ENSURE output is valid JSON. Do not use markdown blocks.`;
 
   const userPrompt = `Generate a tactical scouting report for **${teamName}** in ${game}.
 
@@ -125,7 +125,8 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.8,
+        // Lower temperature to 0.2 to ensure strict JSON adherence
+        temperature: 0.2,
         max_tokens: 6000,
         response_format: { type: "json_object" },
       }),
