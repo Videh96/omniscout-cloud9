@@ -5,8 +5,9 @@ import {
   calculateConfidence,
   calculateThreatLevel,
 } from "./metricsEngine";
+import { APP_CONFIG } from "./constants";
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_URL = APP_CONFIG.GROQ_API_URL;
 
 export const generateScoutingReport = async (
   teamName: string,

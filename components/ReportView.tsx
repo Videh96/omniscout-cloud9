@@ -63,7 +63,7 @@ const ReportView: React.FC<ReportViewProps> = ({ report, gridData }) => {
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="MATCH_SAMPLE"
+          title="SERIES_COUNT"
           value={report.lastMatches.toString()}
           trend="GRID_Live_Stream"
           icon={<History size={16} />}
@@ -72,7 +72,7 @@ const ReportView: React.FC<ReportViewProps> = ({ report, gridData }) => {
         <StatCard
           title="CONFIDENCE_SCORE"
           value={`${displayConfidence}%`}
-          trend="Sample_Reliability"
+          trend="Data_Certainty"
           primary={displayConfidence >= 80}
           icon={<TrendingUp size={16} />}
           badge="Formula_Valid"

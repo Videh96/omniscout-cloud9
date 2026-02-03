@@ -1,6 +1,7 @@
 import { ScoutingReport, GridTeamData, GameType } from "./types";
 import { generateScoutingReport } from "./groqService";
 import { fetchTeamData } from "./gridService";
+import { APP_CONFIG } from "./constants";
 
 /**
  * Comparison Report for head-to-head team analysis
@@ -92,17 +93,16 @@ function analyzeHeadToHead(
     const team1Advantages: string[] = [];
     const team2Advantages: string[] = [];
 
-    if (report1.overallStrategy.earlyGameAggression > report2.overallStrategy.earlyGameAggression + 10) {
-        team1Advantages.push("Early game tempo");
-    } else if (report2.overallStrategy.earlyGameAggression > report1.overallStrategy.earlyGameAggression + 10) {
-        team2Advantages.push("Early game tempo");
-    }
+    const aggDiff = report1.overallStrategy.earlyGameAggression - report2.overallStrategy.earlyGameAggression;
+    if (aggDiff > 10) team1Advantages.push("Early game tempo");
+    else if (aggDiff < -10) team2Advantages.push("Early game tempo");
 
-    if ((gridData1?.teamStats.winRate || 0) > (gridData2?.teamStats.winRate || 0) + 0.1) {
-        team1Advantages.push("Recent form");
-    } else if ((gridData2?.teamStats.winRate || 0) > (gridData1?.teamStats.winRate || 0) + 0.1) {
-        team2Advantages.push("Recent form");
-    }
+    const winRate1 = gridData1?.teamStats.winRate || 0;
+    const winRate2 = gridData2?.teamStats.winRate || 0;
+    const wrDiff = winRate1 - winRate2;
+    
+    if (wrDiff > 0.1) team1Advantages.push("Recent form");
+    else if (wrDiff < -0.1) team2Advantages.push("Recent form");
 
     if (report1.tacticalInsights.confidenceScore > report2.tacticalInsights.confidenceScore) {
         team1Advantages.push("Strategic consistency");
@@ -116,20 +116,26 @@ function analyzeHeadToHead(
 
     // Key matchups
     const keyMatchups: string[] = [];
-    const duelist1 = report1.playerProfiles.find(p => p.role === "Duelist" || p.role === "Mid");
-    const duelist2 = report2.playerProfiles.find(p => p.role === "Duelist" || p.role === "Mid");
+    // Identify carry roles generically
+    const isCarry = (r: string) => 
+        APP_CONFIG.VALORANT.ROLES.includes(r) || APP_CONFIG.LOL.ROLES.includes(r);
 
-    if (duelist1 && duelist2) {
-        keyMatchups.push(`${duelist1.name} vs ${duelist2.name} - Star player duel`);
+    const carry1 = report1.playerProfiles.find(p => isCarry(p.role));
+    const carry2 = report2.playerProfiles.find(p => isCarry(p.role));
+
+    if (carry1 && carry2) {
+        keyMatchups.push(`${carry1.name} vs ${carry2.name} - Star player duel`);
     }
 
     keyMatchups.push(`${team1Name} ${report1.overallStrategy.objectivePriority} obj priority vs ${team2Name} ${report2.overallStrategy.objectivePriority}`);
 
     // Generate verdict
-    const verdict = `${predictedWinner} has the edge with ${team1Advantages.length > team2Advantages.length ?
-        `advantages in ${team1Advantages.slice(0, 2).join(' and ')}` :
-        `superior ${team2Advantages.slice(0, 2).join(' and ')}`}. Key to victory: exploit opponent's ${predictedWinner === team1Name ? report2.tacticalInsights.weaknesses?.[0] : report1.tacticalInsights.weaknesses?.[0]
-        }.`;
+    const winnerAdvantages = predictedWinner === team1Name ? team1Advantages : team2Advantages;
+    const loserWeakness = predictedWinner === team1Name ? report2.tacticalInsights.weaknesses?.[0] : report1.tacticalInsights.weaknesses?.[0];
+
+    const verdict = `${predictedWinner} has the edge with ${winnerAdvantages.length > 0 ?
+        `advantages in ${winnerAdvantages.slice(0, 2).join(' and ')}` :
+        "superior adaptability"}. Key to victory: exploit opponent's ${loserWeakness || "defensive gaps"}.`;
 
     return {
         predictedWinner,

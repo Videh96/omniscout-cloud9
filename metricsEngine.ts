@@ -1,4 +1,5 @@
 import { GridTeamData } from "./types";
+import { APP_CONFIG } from "./constants";
 
 /**
  * Calculates 'Tempo Aggression' (0-100) using Win Rate as a proxy for Momentum.
@@ -12,8 +13,8 @@ export const calculateAggression = (gridData: GridTeamData | null): number => {
     // 0% WR -> 30 (Defensive/Passive)
     // 50% WR -> 65 (Standard)
     // 100% WR -> 95 (Dominant/Aggressive)
-    const base = 30;
-    const momentumBonus = gridData.teamStats.winRate * 65;
+    const base = APP_CONFIG.THRESHOLDS.AGGRESSION_BASE;
+    const momentumBonus = gridData.teamStats.winRate * APP_CONFIG.THRESHOLDS.AGGRESSION_MULTIPLIER;
 
     return Math.min(99, Math.round(base + momentumBonus));
 };
@@ -27,14 +28,14 @@ export const calculateThreatLevel = (gridData: GridTeamData | null): "CRITICAL" 
     const wr = gridData.teamStats.winRate;
 
     // Sample size context is baked into the win rate by the service before it gets here.
-    if (wr >= 0.75) return "CRITICAL";     // Domination (e.g., Won 3/3 or 8/10)
-    if (wr >= 0.60) return "ELEVATED";     // Strong (e.g., Won 2/3 or 6/10)
-    if (wr >= 0.40) return "MODERATE";     // Average (e.g., Won 1/3 or 4-5/10)
+    if (wr >= APP_CONFIG.THRESHOLDS.WIN_RATE_CRITICAL) return "CRITICAL";     // Domination
+    if (wr >= APP_CONFIG.THRESHOLDS.WIN_RATE_ELEVATED) return "ELEVATED";     // Strong
+    if (wr >= APP_CONFIG.THRESHOLDS.WIN_RATE_MODERATE) return "MODERATE";     // Average
     return "LOW";                          // Struggling
 };
 
 /**
- * Calculates Confidence Score based on the specific sample size options (3, 5, 10).
+ * Calculates Confidence Score based on the specific sample size options.
  * Smaller samples = Lower confidence (higher variance).
  */
 export const calculateConfidence = (matchesAnalyzed: number): number => {

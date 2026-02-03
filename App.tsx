@@ -114,7 +114,7 @@ const App: React.FC = () => {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [apiFallback, setApiFallback] = useState(false);
+
   const [currentView, setCurrentView] = useState("SCOUT"); // Default to SCOUT for immediate utility
   const [systemMessage, setSystemMessage] = useState<string | null>(null);
   const [comparisonResult, setComparisonResult] =
@@ -151,7 +151,7 @@ const App: React.FC = () => {
     });
     setComparisonResult(null);
     setLoadingProgress(0);
-    setApiFallback(false);
+
 
     try {
       if (vsMode) {
@@ -185,49 +185,13 @@ const App: React.FC = () => {
         }, 500);
       } else {
         // Standard Mode: Single team analysis
+        let gridData: GridTeamData | null = null;
         setLoadingStatus("Fetching GRID telemetry...");
         setLoadingProgress(20);
 
-        let gridData: GridTeamData | null = null;
-        try {
-          gridData = await fetchTeamData(searchTerm, game);
-        } catch (gridError: any) {
-          console.warn(
-            "GRID API Failure, falling back to sample schema:",
-            gridError,
-          );
-          setApiFallback(true);
-          gridData = {
-            teamStats: {
-              winRate: 0.65,
-              avgRoundDuration: "1:42",
-              pistolWinRate: 0.6,
-              ecoWinRate: 0.18,
-              mapStats: { Haven: { winRate: 0.82 }, Bind: { winRate: 0.45 } },
-            },
-            players: [
-              {
-                name: "Sample_Player_1",
-                role: "Duelist",
-                agentsPlayed: ["Jett", "Raze"],
-                kda: "1.25",
-              },
-              {
-                name: "Sample_Player_2",
-                role: "IGL",
-                agentsPlayed: ["Omen", "Astra"],
-                kda: "1.05",
-              },
-            ],
-            recentMatches: [
-              {
-                map: "Haven",
-                score: "13-10",
-                economyData: { buyRoundWinRate: 0.75 },
-              },
-            ],
-          };
-        }
+        // NO FALLBACKS allowed - must be real GRID data or fail
+        gridData = await fetchTeamData(searchTerm, game);
+
 
         setLoadingStatus("Analyzing patterns...");
         setLoadingProgress(50);
@@ -514,15 +478,7 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {apiFallback && (
-                <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 flex items-center gap-4 text-amber-500 bracket-container animate-in fade-in">
-                  <ShieldAlert size={20} className="flicker" />
-                  <div className="text-xs font-black uppercase mono">
-                    API Connection Pending - Showing Sample Data Structure (GRID
-                    Fallback Active)
-                  </div>
-                </div>
-              )}
+
 
               {!state.report &&
                 !comparisonResult &&

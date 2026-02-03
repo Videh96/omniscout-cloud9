@@ -1,5 +1,6 @@
 
 import { GridTeamData } from "./types";
+import { calculateConfidence } from "./metricsEngine";
 
 export interface TacticalAnalysis {
   weaknesses: string[];
@@ -12,13 +13,13 @@ export interface TacticalAnalysis {
  * Analyzes GRID data to generate hyper-specific, actionable counter-strategies.
  * Connects specific player names, map locations, and timing windows.
  */
-export const analyzeOpponent = (gridData: GridTeamData | null): TacticalAnalysis => {
+export const analyzeOpponent = (gridData: GridTeamData | null, matches: number = 10): TacticalAnalysis => {
   const weaknesses: string[] = [];
   const recommendations: string[] = [];
   const keyExploits: string[] = [];
-  // Confidence score is now reflective of the Series-Level data quality (High but not Granular)
-  // Generating organic variance between 72-96 for non-AI fallback
-  let confidenceScore = Math.floor(Math.random() * (96 - 72 + 1)) + 72;
+  
+  // Calculate confidence based on sample size (matches)
+  let confidenceScore = calculateConfidence(matches);
 
   if (!gridData) {
     return {
@@ -35,8 +36,9 @@ export const analyzeOpponent = (gridData: GridTeamData | null): TacticalAnalysis
 
   // Identify Map Strengths/Weaknesses from Real Data
   const mapsPlayed = Object.keys(teamStats.mapStats || {});
-  const primaryMap = mapsPlayed.reduce((a, b) => (teamStats.mapStats?.[a]?.winRate || 0) > (teamStats.mapStats?.[b]?.winRate || 0) ? a : b, mapsPlayed[0] || "Bind");
-  const weakMap = mapsPlayed.reduce((a, b) => (teamStats.mapStats?.[a]?.winRate || 0) < (teamStats.mapStats?.[b]?.winRate || 0) ? a : b, mapsPlayed[0] || "Split");
+  const primaryMap = mapsPlayed.length > 0 ? mapsPlayed.reduce((a, b) => (teamStats.mapStats?.[a]?.winRate || 0) > (teamStats.mapStats?.[b]?.winRate || 0) ? a : b) : null;
+  const weakMap = mapsPlayed.length > 0 ? mapsPlayed.reduce((a, b) => (teamStats.mapStats?.[a]?.winRate || 0) < (teamStats.mapStats?.[b]?.winRate || 0) ? a : b) : null;
+
 
   // 1. Overall Win Condition Analysis
   if (teamStats.winRate > 0.60) {

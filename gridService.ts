@@ -1,6 +1,5 @@
 import { GameType, GridTeamData } from "./types";
-
-const GRID_API_URL = "https://api-op.grid.gg/central-data/graphql";
+import { APP_CONFIG, COMMON_ORG_NAMES, KNOWN_MAPS } from "./constants";
 
 /**
  * Fetches real esports data from GRID using GraphQL.
@@ -12,55 +11,78 @@ export const fetchTeamData = async (
 ): Promise<GridTeamData> => {
   const apiKey = process.env.VITE_GRID_API_KEY;
 
-  console.log(`[GRID_SERVICE] Searching for: ${searchTerm} (${game})`);
-
   if (!apiKey || apiKey.length < 10) {
-    throw new Error("GRID API Key is missing or invalid. Please configure VITE_GRID_API_KEY in your environment.");
+    throw new Error(
+      "GRID API Key is missing or invalid. Please configure VITE_GRID_API_KEY in your environment.",
+    );
   }
 
   const isVal = game === "VALORANT";
 
+  // STEP 1: Try searching for PLAYER first via API (returns ALL matches)
   try {
-    // STEP 1: Try searching for PLAYER first via API
-    console.log(`[GRID_SERVICE] Step 1: Searching for player "${searchTerm}" via API...`);
-    const playerData = await searchPlayerAPI(searchTerm, game, apiKey);
+    const playerMatches = await searchPlayerAPI(searchTerm, game, apiKey);
 
-    if (playerData) {
-      console.log(`[GRID_SERVICE] ✅ Found player! Team: ${playerData.teamName}`);
-      return await fetchTeamDataByName(playerData.teamName, game, apiKey, isVal);
+    if (playerMatches.length > 0) {
+      // Try each matching player and their team variations until we find match data
+      for (const playerMatch of playerMatches) {
+        // Try all team name variations for this player
+        for (const teamVariation of playerMatch.teamVariations) {
+          try {
+            const teamData = await fetchTeamDataByName(
+              teamVariation,
+              game,
+              apiKey,
+              isVal,
+            );
+            return teamData;
+          } catch (e) {
+            // Continue to next variation
+          }
+        }
+      }
     }
+  } catch (error) {
+    console.warn(
+      `[GRID_SERVICE] Player search step failed (non-fatal), proceeding to team search. Error: ${error}`,
+    );
+  }
 
-    // STEP 2: Player not found, try searching for TEAM
-    console.log(`[GRID_SERVICE] Step 2: Searching for team "${searchTerm}" via API...`);
+  // STEP 2: Player not found OR failed to yield team data, try searching for TEAM directly
+  try {
     return await fetchTeamDataByName(searchTerm, game, apiKey, isVal);
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[GRID_SERVICE] Error: ${errorMessage}`);
 
-    throw new Error(`Data not available for "${searchTerm}". This entity was not found in the GRID esports database.`);
+    throw new Error(`Data not available for "${searchTerm}". ${errorMessage}`);
   }
 };
 
 /**
  * Search for an individual player via GRID API only
+ * Returns ALL matching players so we can try multiple teams
  */
 async function searchPlayerAPI(
   playerName: string,
   game: GameType,
-  apiKey: string
-): Promise<{ teamName: string; playerName: string } | null> {
-  console.log(`[GRID_SERVICE] Searching player "${playerName}" via API...`);
-
+  apiKey: string,
+): Promise<
+  Array<{ teamName: string; playerName: string; teamVariations: string[] }>
+> {
   try {
     const query = `
-      query GetPlayers {
-        allPlayers(first: 500) {
+      query SearchPlayer($filter: PlayerFilter) {
+        players(filter: $filter, first: 20) {
           edges {
             node {
               id
-              name
-              currentTeam {
+              nickname
+              team {
+                id
+                name
+              }
+              title {
                 id
                 name
               }
@@ -70,50 +92,178 @@ async function searchPlayerAPI(
       }
     `;
 
-    const response = await fetch(GRID_API_URL, {
+    const response = await fetch(APP_CONFIG.GRID_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({
+        query,
+        variables: {
+          filter: {
+            nickname: { contains: playerName },
+          },
+        },
+      }),
     });
 
     if (!response.ok) {
       console.warn(`[GRID_API] Player search failed: ${response.status}`);
-      return null;
+      return [];
     }
 
     const json = await response.json();
 
     if (json.errors) {
       console.warn("[GRID_API] Player query returned errors:", json.errors);
-      return null;
+      return [];
     }
 
-    const edges = json.data?.allPlayers?.edges || [];
+    const edges = json.data?.players?.edges || [];
+    const isVal = game === "VALORANT";
+    const targetTitleId = isVal ? APP_CONFIG.VALORANT.TITLE_ID : APP_CONFIG.LOL.TITLE_ID;
 
-    // Find the player in the list (case-insensitive)
-    const foundEdge = edges.find((edge: any) =>
-      edge.node?.name?.toLowerCase().includes(playerName.toLowerCase())
-    );
+    // Find ALL matching players for this game, prioritizing exact matches
+    const matchingPlayers: Array<{
+      teamName: string;
+      playerName: string;
+      teamVariations: string[];
+      isExact: boolean;
+    }> = [];
 
-    if (foundEdge) {
-      const p = foundEdge.node;
-      const teamName = p.currentTeam?.name;
+    for (const edge of edges) {
+      const node = edge.node;
+      if (!node?.nickname || node.title?.id !== targetTitleId) continue;
 
-      if (teamName) {
-        console.log(`[GRID_API] Found player "${p.name}" in team "${teamName}"`);
-        return {
-          teamName: teamName,
-          playerName: p.name,
-        };
-      }
+      const nickname = node.nickname.toLowerCase();
+      const searchLower = playerName.toLowerCase();
+
+      // Check if this player matches (exact or partial)
+      const isExactMatch = nickname === searchLower;
+      const isPartialMatch =
+        nickname.includes(searchLower) || searchLower.includes(nickname);
+
+      if (!isExactMatch && !isPartialMatch) continue;
+
+      const teamName = node.team?.name;
+      if (!teamName) continue;
+
+      // Generate team name variations (e.g., "Sentinels Cubert Academy" -> ["Sentinels Cubert Academy", "Sentinels"])
+      const teamVariations = generateTeamVariations(teamName);
+
+      matchingPlayers.push({
+        teamName: teamName,
+        playerName: node.nickname,
+        teamVariations,
+        isExact: isExactMatch,
+      });
     }
 
-    return null;
+    // Sort: exact matches first, then by team name (shorter = likely main org)
+    matchingPlayers.sort((a, b) => {
+      if (a.isExact !== b.isExact) return a.isExact ? -1 : 1;
+      return a.teamName.length - b.teamName.length;
+    });
+
+    return matchingPlayers.map((p) => ({
+      teamName: p.teamName,
+      playerName: p.playerName,
+      teamVariations: p.teamVariations,
+    }));
   } catch (error) {
     console.warn("[GRID_API] Player search exception:", error);
+    return [];
+  }
+}
+
+/**
+ * Generate variations of team names to improve match finding
+ * e.g., "Sentinels Cubert Academy" -> ["Sentinels Cubert Academy", "Sentinels"]
+ */
+function generateTeamVariations(teamName: string): string[] {
+  const variations = [teamName];
+
+  // Try first word only (e.g., "Sentinels" from "Sentinels Cubert Academy")
+  const words = teamName.split(" ");
+  if (words.length > 1) {
+    variations.push(words[0]);
+  }
+
+  for (const org of COMMON_ORG_NAMES) {
+    if (teamName.toLowerCase().includes(org.toLowerCase())) {
+      if (!variations.includes(org)) {
+        variations.push(org);
+      }
+    }
+  }
+
+  return variations;
+}
+
+/**
+ * Finds the Team ID for a given name and game.
+ * Critical for robust searching when the team hasn't played recently or isn't in the global 'recent' list.
+ */
+async function findTeamId(
+  teamName: string,
+  apiKey: string,
+  titleId: string,
+): Promise<string | null> {
+  const query = `
+    query SearchTeams($filter: TeamFilter) {
+      teams(filter: $filter) {
+        edges {
+          node {
+            id
+            name
+            title {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(APP_CONFIG.GRID_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify({
+        query,
+        variables: {
+          filter: {
+            name: { contains: teamName },
+          },
+        },
+      }),
+    });
+
+    if (!response.ok) return null;
+    const json = await response.json();
+    const edges = json.data?.teams?.edges || [];
+
+    // Filter by title (Game) and find best match
+    const validTeams = edges.filter((e: any) => e.node.title?.id === titleId);
+
+    if (validTeams.length === 0) return null;
+
+    // Prefer exact match, then shortest name (usually the main roster)
+    const exactMatch = validTeams.find(
+      (e: any) => e.node.name.toLowerCase() === teamName.toLowerCase(),
+    );
+    if (exactMatch) return exactMatch.node.id;
+
+    // Otherwise, sort by name length
+    validTeams.sort(
+      (a: any, b: any) => a.node.name.length - b.node.name.length,
+    );
+
+    return validTeams[0].node.id;
+  } catch (e) {
+    console.warn("[GRID_API] Team ID lookup failed:", e);
     return null;
   }
 }
@@ -125,11 +275,15 @@ async function fetchTeamDataByName(
   teamName: string,
   game: GameType,
   apiKey: string,
-  isVal: boolean
+  isVal: boolean,
 ): Promise<GridTeamData> {
+  // 1. Try to find specific Team ID first for accuracy
+  const targetTitleId = isVal ? APP_CONFIG.VALORANT.TITLE_ID : APP_CONFIG.LOL.TITLE_ID;
+  const explicitTeamId = await findTeamId(teamName, apiKey, targetTitleId);
+
   const query = `
     query SearchSeriesDeep($filter: SeriesFilter) {
-      allSeries(filter: $filter, first: 15) {
+      allSeries(filter: $filter, first: 20) {
         edges {
           node {
             id
@@ -153,18 +307,23 @@ async function fetchTeamDataByName(
     }
   `;
 
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const searchDate = new Date();
+  searchDate.setMonth(searchDate.getMonth() - APP_CONFIG.SEARCH_WINDOW_MONTHS);
 
-  const variables = {
-    filter: {
-      startTimeScheduled: {
-        gte: sixMonthsAgo.toISOString(),
-      },
+  // Construct filter: Use Team ID if available, otherwise just time + manual filter
+  const filter: any = {
+    startTimeScheduled: {
+      gte: searchDate.toISOString(),
     },
   };
 
-  const response = await fetch(GRID_API_URL, {
+  if (explicitTeamId) {
+    filter.teamId = explicitTeamId;
+  }
+
+  const variables = { filter };
+
+  const response = await fetch(APP_CONFIG.GRID_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -186,17 +345,25 @@ async function fetchTeamDataByName(
   const edges = json.data?.allSeries?.edges || [];
 
   if (edges.length === 0) {
-    throw new Error("No series data found in GRID");
+    throw new Error(
+      explicitTeamId
+        ? `Team found but has no matches in the last ${APP_CONFIG.SEARCH_WINDOW_MONTHS} months.`
+        : "No series data found in GRID",
+    );
   }
 
-  // Filter for relevant series
+  // Filter for relevant series (Still useful to double check Title if we didn't filter by Team ID)
   const relevantSeries = edges.filter((edge: any) => {
     const titleName = edge.node.title?.name || "";
-    const teams = edge.node.teams || [];
     const gameKeyword = isVal ? "valorant" : "league";
     const isCorrectGame = titleName.toLowerCase().includes(gameKeyword);
+
+    if (explicitTeamId) return isCorrectGame; // Already filtered by teamId
+
+    // Fallback name matching
+    const teams = edge.node.teams || [];
     const isTeamMatch = teams.some((t: any) =>
-      t.baseInfo?.name?.toLowerCase().includes(teamName.toLowerCase())
+      t.baseInfo?.name?.toLowerCase().includes(teamName.toLowerCase()),
     );
     return isCorrectGame && isTeamMatch;
   });
@@ -205,16 +372,20 @@ async function fetchTeamDataByName(
     throw new Error(`No match data found for "${teamName}" in ${game}`);
   }
 
-  console.log(`[GRID_API] Found ${relevantSeries.length} matches. Parsing data...`);
-
   // Calculate stats from series data
   let wins = 0;
   let totalMatches = 0;
-  const mapStats: Record<string, { wins: number; total: number; winRate: number }> = {};
+  const mapStats: Record<
+    string,
+    { wins: number; total: number; winRate: number }
+  > = {};
 
   const matches = relevantSeries.map((edge: any, seriesIdx: number) => {
     const node = edge.node;
-    const opponentNode = node.teams.find((t: any) => !t.baseInfo.name.toLowerCase().includes(teamName.toLowerCase()));
+    const opponentNode = node.teams.find(
+      (t: any) =>
+        !t.baseInfo.name.toLowerCase().includes(teamName.toLowerCase()),
+    );
 
     // Win/Loss pattern from series position (API limitation - no direct win data)
     const isWin = seriesIdx % 3 !== 0;
@@ -225,43 +396,69 @@ async function fetchTeamDataByName(
     // Map Stats
     let mapName = "Series";
     const title = node.title?.name || "";
-    const knownMaps = ["Haven", "Bind", "Split", "Ascent", "Lotus", "Pearl", "Sunset", "Breeze", "Icebox", "Fracture"];
-    const foundMap = knownMaps.find(m => title.includes(m));
+    
+    const foundMap = KNOWN_MAPS.find((m) => title.includes(m));
     if (foundMap) mapName = foundMap;
 
-    if (!mapStats[mapName]) mapStats[mapName] = { wins: 0, total: 0, winRate: 0 };
+    if (!mapStats[mapName])
+      mapStats[mapName] = { wins: 0, total: 0, winRate: 0 };
     mapStats[mapName].total++;
     if (isWin) mapStats[mapName].wins++;
-    mapStats[mapName].winRate = mapStats[mapName].wins / mapStats[mapName].total;
+    mapStats[mapName].winRate =
+      mapStats[mapName].wins / mapStats[mapName].total;
 
     return {
-      map: mapName !== "Series" ? mapName : (node.format?.name || "Match"),
+      map: mapName !== "Series" ? mapName : node.format?.name || "Match",
       score: `${isWin ? "WIN" : "LOSS"} vs ${opponentNode?.baseInfo?.name || "Opponent"}`,
       economyData: { buyRoundWinRate: undefined },
     };
   });
 
-  // Fetch players from GRID API
-  const playersQuery = `query GetPlayers { allPlayers(first: 500) { edges { node { id name currentTeam { id name } } } } }`;
+  // Fetch realistic players for this team from the root players endpoint
   let realPlayers: string[] = [];
 
   try {
-    const playersResponse = await fetch(GRID_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({ query: playersQuery })
-    });
+    // 1. Get the Team ID from the first relevant series OR use the one we found
+    const teamId =
+      explicitTeamId ||
+      relevantSeries[0]?.node?.teams?.find((t: any) =>
+        t.baseInfo?.name?.toLowerCase().includes(teamName.toLowerCase()),
+      )?.baseInfo?.id;
 
-    if (playersResponse.ok) {
-      const playersJson = await playersResponse.json();
-      const allPlayers = playersJson.data?.allPlayers?.edges || [];
-      realPlayers = allPlayers
-        .filter((edge: any) => edge.node?.currentTeam?.name?.toLowerCase().includes(teamName.toLowerCase()))
-        .map((edge: any) => edge.node.name)
-        .slice(0, 5);
+    if (teamId) {
+      const playersQuery = `
+        query GetTeamPlayers($filter: PlayerFilter) {
+          players(filter: $filter, first: 10) {
+            edges {
+              node {
+                nickname
+              }
+            }
+          }
+        }
+      `;
+
+      const pResponse = await fetch(APP_CONFIG.GRID_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({
+          query: playersQuery,
+          variables: {
+            filter: {
+              teamIdFilter: { id: teamId },
+            },
+          },
+        }),
+      });
+
+      if (pResponse.ok) {
+        const pJson = await pResponse.json();
+        const pEdges = pJson.data?.players?.edges || [];
+        realPlayers = pEdges.map((e: any) => e.node.nickname).slice(0, 5);
+      }
     }
   } catch (error) {
-    console.warn("[GRID_API] Player fetch failed:", error);
+    console.warn("[GRID_API] Player roster fetch failed:", error);
   }
 
   // If no players found, show "Data not available"
@@ -273,7 +470,9 @@ async function fetchTeamDataByName(
 
   // Transform mapStats
   const finalMapStats: Record<string, { winRate: number }> = {};
-  Object.keys(mapStats).forEach(key => { finalMapStats[key] = { winRate: mapStats[key].winRate }; });
+  Object.keys(mapStats).forEach((key) => {
+    finalMapStats[key] = { winRate: mapStats[key].winRate };
+  });
 
   return {
     teamStats: {
@@ -285,7 +484,7 @@ async function fetchTeamDataByName(
     },
     players: realPlayers.map((name, idx) => ({
       name: name,
-      role: name === "Player data not available" ? "N/A" : (isVal ? ["Duelist", "Initiator", "Controller", "Sentinel", "Flex"][idx % 5] : ["Top", "Jungle", "Mid", "ADC", "Support"][idx % 5]),
+      role: "N/A", // NO GUESSED ROLES - real data or N/A
       agentsPlayed: [],
       kda: "N/A",
     })),
