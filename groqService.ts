@@ -85,9 +85,9 @@ REQUIRED JSON STRUCTURE:
       "MANDATORY: Specific weakness 1 with tactical details",
       "MANDATORY: Specific weakness 2 with map/timing info"
     ],
-    "howToWin": "Concrete counter-strategy (e.g., 'Exploit their weak A-site retakes by forcing 5v4 post-plants')",
-    "counterPicks": ["Champion/Agent 1 (Reason)", "Champion/Agent 2 (Reason)"],
-    "winCondition": "The specific condition required to win (e.g., 'Shut down the bottom lane early to deny their late-game insurance')",
+    "howToWin": "Concrete counter-strategy",
+    "counterPicks": ["Champion/Agent 1", "Champion/Agent 2"],
+    "winCondition": "The specific condition required to win",
     "confidenceScore": 85,
     "threatLevel": "CRITICAL"
   },
@@ -98,9 +98,8 @@ VALIDATION RULES:
 - ❌ REJECT if player names contain "Player_", "Sample_", or numbers
 - ❌ REJECT if weaknesses array is empty or says "No weakness"
 - ✅ ACCEPT only if weaknesses are specific and exploitable
-- ✅ INCLUDE specific counter-picks (Agents/Champions) that work well against their tendencies
-- ✅ ENSURE confidenceScore is between 0-100 based on data quality (GRID data = higher)
-- ✅ ASSIGN threatLevel based on number/severity of exploits found`;
+- ✅ ENSURE threatLevel is EXACTLY one of: "CRITICAL", "ELEVATED", "MODERATE", "LOW"
+- ✅ ENSURE output is valid JSON with no trailing commas or markdown formatting`;
 
   const userPrompt = `Generate a tactical scouting report for **${teamName}** in ${game}.
 
@@ -120,7 +119,7 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -147,7 +146,9 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
       throw new Error("Empty response from Groq");
     }
 
-    const report = JSON.parse(content) as ScoutingReport;
+    // Clean potential markdown formatting from AI
+    const cleanContent = content.replace(/```json\n?|\n?```/g, "").trim();
+    const report = JSON.parse(cleanContent) as ScoutingReport;
 
     // Overwrite AI estimations with deterministic calculations
     report.overallStrategy.earlyGameAggression = calculateAggression(gridData);
