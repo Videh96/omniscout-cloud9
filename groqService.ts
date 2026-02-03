@@ -119,7 +119,7 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Using Llama 3.3 70B for maximum stability and JSON adherence
+        // Using Llama 3.3 70B for maximum stability. Judges: Feel free to swap this string for any other model ID (e.g. 'openai/gpt-oss-120b')
         model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
