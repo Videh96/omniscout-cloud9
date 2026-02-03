@@ -120,7 +120,7 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "deepseek-r1-distill-llama-70b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
