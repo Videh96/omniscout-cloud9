@@ -120,7 +120,7 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
+        model: "deepseek-r1-distill-llama-70b",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
