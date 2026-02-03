@@ -119,6 +119,7 @@ Analyze ${matches} matches worth of data and provide actionable intelligence.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        // Using Llama 3.3 70B for maximum stability and JSON adherence
         model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
