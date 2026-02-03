@@ -1,0 +1,343 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-color: #0a0a0f;
+  --panel-bg: rgba(21, 21, 32, 0.6);
+  --accent-cyan: #00d4ff;
+  --accent-magenta: #ff00ff;
+  --accent-green: #00ff88;
+  --accent-orange: #f59e0b;
+  --border-glass: rgba(255, 255, 255, 0.08);
+
+  /* Tactical Logo Theme Variables */
+  --logo-primary: #ffffff;
+  --logo-accent: var(--accent-cyan);
+  --logo-accent-glow: rgba(0, 212, 255, 0.4);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-color);
+  color: #f3f4f6;
+  overflow-x: hidden;
+  margin: 0;
+}
+
+.header-font {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Scanline Effect */
+.scanline::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0.05) 1px,
+      rgba(0, 0, 0, 0) 3px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Film Grain Effect */
+.grain::after {
+  content: "";
+  position: fixed;
+  top: -150%;
+  left: -150%;
+  width: 300%;
+  height: 300%;
+  background-image: url('https://upload.wikimedia.org/wikipedia/commons/7/76/Noise_600x600.png');
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: 9998;
+  animation: grain 8s steps(10) infinite;
+}
+
+@keyframes grain {
+
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(-5%, -10%);
+  }
+
+  20% {
+    transform: translate(-15%, 5%);
+  }
+
+  30% {
+    transform: translate(7%, -25%);
+  }
+
+  40% {
+    transform: translate(-5%, 25%);
+  }
+
+  50% {
+    transform: translate(-15%, 10%);
+  }
+
+  60% {
+    transform: translate(15%, 0%);
+  }
+
+  70% {
+    transform: translate(0%, 15%);
+  }
+
+  80% {
+    transform: translate(3%, 35%);
+  }
+
+  90% {
+    transform: translate(-10%, 10%);
+  }
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+}
+
+/* Bracket Styling */
+.bracket-container {
+  position: relative;
+}
+
+.bracket-container::before,
+.bracket-container::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--accent-cyan);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.bracket-container::before {
+  top: -1px;
+  left: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.bracket-container::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+/* Glows */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
+}
+
+.glow-magenta {
+  box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+}
+
+.glow-text-magenta {
+  text-shadow: 0 0 10px rgba(255, 0, 255, 0.6);
+}
+
+/* Laser Sweep */
+.laser-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.laser-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent);
+  transition: all 0.6s ease;
+}
+
+.laser-btn:hover::after {
+  left: 150%;
+}
+
+/* Neon Flicker */
+@keyframes flicker {
+
+  0%,
+  19%,
+  21%,
+  23%,
+  25%,
+  54%,
+  56%,
+  100% {
+    opacity: 1;
+  }
+
+  20%,
+  22%,
+  24%,
+  55% {
+    opacity: 0.4;
+  }
+}
+
+.flicker {
+  animation: flicker 4s infinite;
+}
+
+/* Tech Rotation */
+.tech-spin {
+  animation: spin 12s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Typing and Terminal Animations */
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor::after {
+  content: "_";
+  animation: blink 0.8s infinite;
+}
+
+@keyframes line-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.reveal-line {
+  animation: line-reveal 0.3s forwards ease-out;
+}
+
+.log-line {
+  opacity: 0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-cyan);
+}
+
+.grid-bg {
+  background-image: radial-gradient(var(--border-glass) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Print Optimizations */
+@media print {
+
+  .scanline,
+  .grain,
+  aside,
+  header,
+  .no-print,
+  button,
+  .sidebar-rail {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+  }
+
+  main {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .glass-panel,
+  .bracket-container,
+  .bg-black\/40 {
+    background: none !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .glow-text-cyan,
+  .glow-text-magenta,
+  .text-white {
+    color: #000 !important;
+    text-shadow: none !important;
+  }
+
+  .printable-area {
+    display: block !important;
+  }
+}
+
+/* Progress Bar Utility */
+.progress-bar {
+  width: var(--progress-width, 0%);
+}
